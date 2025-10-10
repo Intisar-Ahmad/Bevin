@@ -1,6 +1,7 @@
 import userModel from "../models/user.model.js";
 import { createUser } from "../services/user.service.js";
 import {  validationResult } from "express-validator";
+import redisClient from "../services/redis.service.js";
 
 export const registerUserController = async (req, res) => {
       const errors = validationResult(req);
@@ -68,4 +69,18 @@ export const profileController = async (req , res) => {
    res.status(200).json({
     user:req.user
    })
+}
+
+export const logoutController = async (req,res) => {
+    try {
+        const token = req.cookies.token || req.header('Authorization').replace('Bearer ','');
+
+        redisClient.set(token,'logout','EX', 24*60*60); // expire in 24 hours
+
+        res.status(200).json({msg:"Logged out successfully"});
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({errors:"Something went wrong, please try again"})
+    }
 }
