@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 
 const Register = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [touched, setTouched] = useState({ email: false, password: false });
     const [error, setError] = useState({ email: '', password: '' });
+    const navigate = useNavigate();
 
     const validateEmail = (value) => {
-        // HTML email input does basic validation, but we add extra for feedback
         if (!value) return 'Email is required';
-        // Simple regex for email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(value)) return 'Invalid email address';
         return '';
@@ -46,7 +46,9 @@ const Register = () => {
         setError({ email: emailErr, password: passwordErr });
         setTouched({ email: true, password: true });
         if (!emailErr && !passwordErr) {
-            // Submit registration logic here
+            // Registration logic here
+            // After successful registration, navigate to login or dashboard
+            navigate('/login');
         }
     };
 
@@ -99,12 +101,12 @@ const Register = () => {
                 </form>
                 <div className="flex items-center justify-between mt-6">
                     <span className="text-gray-400 text-sm">Already have an account?</span>
-                    <button
+                    <Link
+                        to="/login"
                         className="text-blue-500 hover:underline text-sm font-medium"
-                        onClick={() => window.location.href = '/login'}
                     >
                         Sign In
-                    </button>
+                    </Link>
                 </div>
             </div>
         </div>

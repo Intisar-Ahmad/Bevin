@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 
 const ResetPassword = () => {
     const [newPassword, setNewPassword] = useState('');
@@ -12,6 +12,7 @@ const ResetPassword = () => {
     // Extract token from query params
     const params = new URLSearchParams(location.search);
     const token = params.get('token');
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -31,13 +32,12 @@ const ResetPassword = () => {
         }
 
         try {
-            // Replace with your API endpoint
-            const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}//reset-password`, {
+            const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/users/reset-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token, password: newPassword }),
             });
-            const data = await res.json();
+            // const data = await res.json();
             if (res.ok) {
                 setSuccess(true);
                 setTimeout(() => navigate('/'), 5000);
@@ -58,12 +58,12 @@ const ResetPassword = () => {
                     <div className="text-center">
                         <p className="text-green-400 font-semibold mb-4">Password reset successfully!</p>
                         <p className="text-gray-300 mb-4">Redirecting to home page in 5 seconds...</p>
-                        <button
-                            className="py-2 px-4 bg-blue-700 text-white rounded-lg font-bold hover:scale-105 transition-transform"
-                            onClick={() => navigate('/')}
+                        <Link
+                            className="py-2 px-4 bg-blue-700 text-white rounded-lg font-bold hover:scale-105 transition-transform inline-block"
+                            to="/"
                         >
                             Go to Home
-                        </button>
+                        </Link>
                     </div>
                 ) : (
                     <form className="space-y-6" onSubmit={handleSubmit}>
@@ -100,6 +100,9 @@ const ResetPassword = () => {
                         >
                             Reset Password
                         </button>
+                        <div className="text-center mt-4">
+                            <Link to="/" className="text-blue-400 hover:underline">Back to Home</Link>
+                        </div>
                     </form>
                 )}
             </div>

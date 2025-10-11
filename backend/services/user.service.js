@@ -17,3 +17,4 @@ export const createUser = async ({email,password}) => {
         throw new Error("Error creating user");
    }
 }
+

@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import redisClient from "../services/redis.service.js";
-
+import User from "../models/user.model.js";
 
 export const authUserMiddleware = async (req,res,next) => {
     try {
@@ -21,14 +21,19 @@ export const authUserMiddleware = async (req,res,next) => {
         }
 
 
-        // checking if token is expired?
+   
         const decoded = jwt.verify(token,process.env.JWT_SECRET);
+        
+        const user = await User.findById(decoded._id);
 
+        if(!user){
+            return res.status(401).json({errors:"User not found"});
+        }
         
         // console.log(decoded)
 
 
-        req.user = decoded;
+        req.user = user;
         next();
 
     } catch (error) {
