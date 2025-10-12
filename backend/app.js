@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import connectDB from './db/db.js';
 import userRoutes from './routes/user.route.js';
+import projectRoutes from './routes/project.route.js'
 import cors from 'cors'
 
 
@@ -20,7 +21,7 @@ app.use(express.json());
 app.use(urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use('/users', userRoutes);
-
+app.use('/projects',projectRoutes)
 
 app.get('/',(req,res)=>{
     res.send("Hello world")

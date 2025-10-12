@@ -2,7 +2,7 @@ import userModel from "../models/user.model.js";
 import { createUser } from "../services/user.service.js";
 import { validationResult } from "express-validator";
 import redisClient from "../services/redis.service.js";
-import { sendEmail } from "../services/sendEmail.js";
+import { sendEmail } from "../services/sendEmail.service.js";
 import jwt from 'jsonwebtoken'
 
 export const registerUserController = async (req, res) => {
@@ -16,7 +16,11 @@ export const registerUserController = async (req, res) => {
 
     const token = await user.generateAuthToken();
 
-    res.status(201).json({ user, token });
+    // Convert user to plain object and remove password
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    res.status(201).json({ user: userObj, token });
   } catch (error) {
     res.status(400).send(error.message);
   }
@@ -47,6 +51,9 @@ export const loginUserController = async (req, res) => {
     }
 
     const token = await user.generateAuthToken();
+
+    const userObj = user.toObject();
+    delete userObj.password;
 
     res.status(200).json({ user, token });
   } catch (error) {

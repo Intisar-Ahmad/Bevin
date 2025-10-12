@@ -1,24 +1,26 @@
 import React from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate, Link } from 'react-router-dom';
 
 const ForgotPassword = () => {
-    const [email, setEmail] = React.useState('');
+    const { register, handleSubmit, formState: { errors, touchedFields } } = useForm();
     const [isSending, setIsSending] = React.useState(false);
     const [sent, setSent] = React.useState(false);
+    const [email, setEmail] = React.useState('');
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const onSubmit = async (data) => {
         setIsSending(true);
+        setEmail(data.email);
         try {
-           let res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/users/forgot-password`, {
+            let res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/users/forgot-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email: data.email }),
             });
 
-            let data = await res.json();
+            let result = await res.json();
 
-            if(data?.msg){
+            if (result?.msg) {
                 setSent(true);
             }
         } catch (error) {
@@ -34,20 +36,27 @@ const ForgotPassword = () => {
                 <h1 className="text-4xl font-extrabold text-white mb-2 text-center tracking-wide">Bevin</h1>
                 <p className="text-gray-400 text-center mb-8">Reset your password</p>
                 {!sent ? (
-                    <form className="space-y-6" onSubmit={handleSubmit}>
+                    <form className="space-y-6" onSubmit={handleSubmit(onSubmit)} noValidate>
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email</label>
                             <input
                                 type="email"
                                 id="email"
                                 autoComplete="email"
-                                required
-                                value={email}
-                                onChange={e => setEmail(e.target.value)}
-                                className="mt-1 w-full px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                                 placeholder="you@bevin.ai"
+                                className={`mt-1 w-full px-4 py-2 bg-gray-800 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 ${errors.email && touchedFields.email ? 'border border-red-500' : ''}`}
                                 disabled={isSending}
+                                {...register('email', {
+                                    required: 'Email is required',
+                                    pattern: {
+                                        value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                                        message: 'Enter a valid email address'
+                                    }
+                                })}
                             />
+                            {errors.email && touchedFields.email && (
+                                <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+                            )}
                         </div>
                         <button
                             type="submit"
@@ -64,7 +73,7 @@ const ForgotPassword = () => {
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                         </svg>
                         <p className="text-white text-lg font-semibold mb-2">Check your inbox</p>
-                        <p className="text-gray-400 text-center text-sm">We've sent a password reset link to <span className="font-medium text-blue-400">{email}</span>.If it exists </p>
+                        <p className="text-gray-400 text-center text-sm">We've sent a password reset link to <span className="font-medium text-blue-400">{email}</span>. If it exists </p>
                     </div>
                 )}
                 <div className="mt-6 text-center">

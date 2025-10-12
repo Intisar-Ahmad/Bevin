@@ -30,10 +30,10 @@ export const authUserMiddleware = async (req,res,next) => {
             return res.status(401).json({errors:"User not found"});
         }
         
-        // console.log(decoded)
+        console.log(decoded)
 
 
-        req.user = user;
+        req.user = user.toObject();
         next();
 
     } catch (error) {
