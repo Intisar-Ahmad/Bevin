@@ -17,7 +17,7 @@ const Register = () => {
   const onSubmit = async ({ email, password }) => {
     try {
       let res = await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/users/register`,
+        `/users/register`,
         {
           email,
           password,
@@ -33,7 +33,7 @@ const Register = () => {
       navigate("/");
 
     } catch (error) {
-      alert(error.message);
+    alert(error.response?.data?.errors || error.message);
     }
   };
 

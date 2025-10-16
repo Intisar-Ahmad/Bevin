@@ -14,7 +14,7 @@ export const createUser = async ({email,password}) => {
     
         console.log(error);
 
-        throw new Error("Error creating user");
+        throw error;
    }
 }
 

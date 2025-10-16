@@ -16,6 +16,7 @@ app.use(cors({
     origin:process.env.FRONTEND_URL,
     credentials:true
 }))
+// app.disable('etag'); 
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(urlencoded({ extended: true }));
