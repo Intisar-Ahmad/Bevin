@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { createProjectController,getAllProject,addUser, removeUser, getProject } from "../controllers/project.controller.js";
+import { createProjectController,getAllProject,addUser, removeUser, getProject, deleteProject } from "../controllers/project.controller.js";
 import { authUserMiddleware } from "../middleware/auth.middleware.js";
 const router = Router();
 
@@ -18,10 +18,10 @@ router.get('/all',
 
 router.patch('/add-users', 
     authUserMiddleware,
-    body('userIds')
-        .isArray({ min: 1 }).withMessage("userIds must be a non-empty array")
-        .custom((arr) => arr.every(id => typeof id === 'string' && id.trim() !== ''))
-        .withMessage("Every userId must be a non-empty string"),
+    body('userEmails')
+        .isArray({ min: 1 }).withMessage("userEmails must be a non-empty array")
+        .custom((arr) => arr.every(email => typeof email === 'string' && email.trim() !== ''))
+        .withMessage("Every userEmail must be a non-empty string"),
     body('projectId')
         .isString().withMessage("ProjectId must be String").notEmpty().withMessage("ProjectId is required"),
     addUser
@@ -40,6 +40,11 @@ router.post('/remove-user',
 router.get('/get-project/:projectId',
     authUserMiddleware,
     getProject
+);
+
+router.post('/delete/:projectId',
+    authUserMiddleware,
+    deleteProject
 );
 
 export default router;
