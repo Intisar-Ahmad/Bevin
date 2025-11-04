@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, X, UsersRound, Plus, Search } from "lucide-react";
+import { Send, X, UsersRound, Plus, Search, Crown } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import axios from "../config/axios.js";
 import Loader from "../components/Loader.jsx";
 import { checkAuth } from "../utils/checkToken.utils.js";
 import { useUser } from "../context/user.context.jsx";
-
+import { initializeSocket, receiveMsg, sendMsg } from "../config/socketIO.js";
 
 export default function ProjectPageLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -21,58 +21,86 @@ export default function ProjectPageLayout() {
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [userToRemove, setUserToRemove] = useState(null);
   const [removing, setRemoving] = useState(false);
-  const {user,setUser} = useUser();
+  const { user, setUser } = useUser();
   const [contextMenu, setContextMenu] = useState({
     visible: false,
     x: 0,
     y: 0,
     user: null,
   });
+  const messagesEndRef = useRef(null);
 
   const navigate = useNavigate();
 
- useEffect(() => {
-  const init = async () => {
-    // get the validated user directly from checkAuth
-    const validatedUser = await checkAuth(navigate, setUser);
-    if (!validatedUser) return; // not authenticated
+  useEffect(() => {
+    let socket;
 
-    // now fetch project and check membership using validatedUser
-    try {
-      const res = await axios.get(`/projects/get-project/${projectId}`);
-      const fetchedProject = res.data.project;
+    const init = async () => {
+      setLoading(true);
+      try {
+        // authenticate user
+        const validatedUser = await checkAuth(navigate, setUser);
+        if (!validatedUser) {
+          navigate("/login");
+          return;
+        }
 
-      const isMember = fetchedProject.users.some(
-        (u) => u._id === validatedUser._id
-      );
-      const isCreator = fetchedProject.creator === validatedUser._id;
+        // fetch project
+        const { data } = await axios.get(`/projects/get-project/${projectId}`);
+        const fetchedProject = data.project;
 
-      // console.log(isMember, isCreator, fetchedProject, validatedUser);
+        const isMember = fetchedProject.users.some(
+          (u) => u._id === validatedUser._id
+        );
+        const isCreator = fetchedProject.creator === validatedUser._id;
 
-      if (!isMember && !isCreator) {
-        // don't be aggressive — remove token and redirect
-        localStorage.removeItem("token");
-        setUser(null);
-        alert("You don't have access to this project.");
+        if (!isMember && !isCreator) {
+          localStorage.removeItem("token");
+          setUser(null);
+          alert("You don't have access to this project.");
+          navigate("/");
+          return;
+        }
+
+        setProject(fetchedProject);
+
+        //  Initialize socket once
+        socket = initializeSocket(fetchedProject._id);
+
+        //  Handle incoming messages (ignore own)
+        const handleIncoming = (data) => {
+          if (data.sender === validatedUser.email) return;
+          const incoming = {
+            id: Date.now(),
+            sender: data.sender || "Unknown",
+            text: data.text,
+            type: "incoming",
+          };
+          setMessages((prev) => [...prev, incoming]);
+        };
+
+        receiveMsg("project-message", handleIncoming);
+
+        //Cleanup listener on unmount / project switch
+        return () => {
+          if (socket) socket.off("project-message", handleIncoming);
+        };
+      } catch (err) {
+        console.error(err);
+        alert(err.response?.data?.errors || "Failed to load project");
         navigate("/");
-        return;
+      } finally {
+        setLoading(false);
       }
+    };
 
-      setProject(fetchedProject);
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.errors || "Failed to load project");
-      navigate("/");
-    } finally {
-      setLoading(false);
-    }
-  };
+    init();
 
-  init();
-}, [projectId,user]); // run when projectId changes
-
-
-
+    //  If projectId changes, re-run and cleanup old listener
+    return () => {
+      if (socket) socket.off("project-message");
+    };
+  }, [projectId, navigate, setUser]);
 
   // Chat state
   const [messages, setMessages] = useState([]);
@@ -85,17 +113,37 @@ export default function ProjectPageLayout() {
     defaultValues: { message: "" },
   });
 
-  const onSubmit = (data) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        sender: user.email,
-        text: data.message,
-        type: "outgoing",
-      },
-    ]);
+  const onSubmit = async (data) => {
+    const messageText = data.message?.trim();
+
+    if (!user || !project?._id) {
+      console.error("Missing user or project context.");
+      alert("Unable to send message. Please refresh the page");
+      return;
+    }
+
+    // 2️  Optimistic UI update — show message immediately
+    const localMessage = {
+      id: Date.now(),
+      sender: user.email,
+      text: messageText,
+      type: "outgoing",
+    };
+
+    setMessages((prev) => [...prev, localMessage]);
     reset();
+
+    try {
+      // 3️ Send the message through socket
+      sendMsg("project-message", {
+        sender: user.email,
+        text: messageText,
+        projectId: project._id,
+      });
+    } catch (err) {
+      console.error("Socket send failed:", err);
+      alert("Failed to send message. refresh");
+    }
   };
 
   // Search users
@@ -120,7 +168,7 @@ export default function ProjectPageLayout() {
       } finally {
         setSearchLoading(false);
       }
-    }, 400); // wait 400 ms after last keystroke
+    }, 200); // wait 200 ms after last keystroke
   };
 
   // Toggle user selection
@@ -177,10 +225,14 @@ export default function ProjectPageLayout() {
     }
   };
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   if (loading) return <Loader />;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex overflow-hidden">
+    <main className="min-h-screen max-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex overflow-hidden">
       {/* ---------- COLLABORATORS DRAWER ---------- */}
       <div
         className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-gray-950/90 backdrop-blur-xl border-r border-gray-800 p-4 transition-transform duration-300 ${
@@ -205,30 +257,30 @@ export default function ProjectPageLayout() {
             project.users.map((collaborator, index) => (
               <div
                 key={index}
-                onContextMenu={(e) => {
+                onClick={(e) => {
                   e.preventDefault();
-                  if(project?.creator === user._id){
-                      const isCreator =
-                    project?.creator === collaborator._id; // <-- Replace with real user check
-                  if (isCreator) return; // block others & self
-                  setContextMenu({
-                    visible: true,
-                    x: e.pageX,
-                    y: e.pageY,
-                    user: collaborator,
-                  });
-
+                  if (project?.creator === user._id) {
+                    const isCreator = project?.creator === collaborator._id; // <-- Replace with real user check
+                    if (isCreator) return; // block others & self
+                    setContextMenu({
+                      visible: true,
+                      x: e.pageX,
+                      y: e.pageY,
+                      user: collaborator,
+                    });
                   }
-
-            
                 }}
                 className="flex items-center gap-3 bg-gray-800/70 hover:bg-gray-700/80 p-3 rounded-lg transition cursor-pointer"
               >
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-700 to-purple-700 rounded-full flex-shrink-0" />
                 <div className="flex-1">
-                  <div className="text-sm font-medium">{collaborator?.email}</div>
+                  <div className="text-sm font-medium">
+                    {collaborator?.email}
+                  </div>
                   <div className="text-xs text-gray-500">
-                    {collaborator._id === project?.creator ? "Creator" : "Collaborator"}
+                    {collaborator._id === project?.creator
+                      ? "Creator"
+                      : "Collaborator"}
                   </div>
                 </div>
               </div>
@@ -279,15 +331,6 @@ export default function ProjectPageLayout() {
         </>
       )}
 
-      {/* OVERLAY */}
-      {drawerOpen && (
-        <button
-          onClick={() => setDrawerOpen(false)}
-          className="fixed inset-0 z-40 bg-black/50"
-          aria-hidden="true"
-        />
-      )}
-
       {/* CHAT SIDEBAR */}
       <aside className="w-80 flex-shrink-0 bg-gray-950/80 backdrop-blur-xl border-r border-gray-800 flex flex-col p-4 relative z-20">
         <div className="flex items-center justify-between mb-4">
@@ -302,7 +345,17 @@ export default function ProjectPageLayout() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
+        <style>{`
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none;    /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+`}</style>
+
+        <div className="flex-1 overflow-y-auto max-h-screen space-y-3 no-scrollbar">
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -311,12 +364,25 @@ export default function ProjectPageLayout() {
               }`}
             >
               <small
-                className={`text-xs mb-1 ${
+                className={`flex items-center gap-1 text-xs mb-1 ${
                   msg.type === "outgoing" ? "text-blue-400" : "text-gray-400"
                 }`}
               >
                 {msg.sender}
+                {(() => {
+                  const creator = project?.users?.find(
+                    (u) => u._id === project?.creator
+                  );
+                  return msg.sender === creator?.email ? (
+                    <Crown
+                      size={12}
+                      className="text-yellow-400"
+                      title="Project Creator"
+                    />
+                  ) : null;
+                })()}
               </small>
+
               <div
                 className={`p-3 rounded-lg max-w-xs break-words ${
                   msg.type === "outgoing"
@@ -328,6 +394,7 @@ export default function ProjectPageLayout() {
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* ERROR MESSAGE ABOVE INPUT BAR */}
@@ -340,6 +407,7 @@ export default function ProjectPageLayout() {
         <form
           onSubmit={handleSubmit(onSubmit)}
           className="flex items-center gap-3 bg-gray-900/80 border border-gray-800 rounded-xl px-3 py-2 mt-1"
+          autoComplete="off"
         >
           <input
             type="text"
@@ -399,7 +467,7 @@ export default function ProjectPageLayout() {
             </div>
 
             {/* SEARCH RESULTS */}
-            <div className="space-y-2 max-h-52 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-700/80 scrollbar-track-gray-900/40 hover:scrollbar-thumb-gray-600/80 transition-all duration-300">
               {searchLoading ? (
                 <p className="text-gray-500 text-sm">Searching...</p>
               ) : searchResults.length ? (
@@ -418,7 +486,6 @@ export default function ProjectPageLayout() {
                       <span className="text-xs text-blue-300">Added</span>
                     )}
                   </button>
-                  
                 ))
               ) : (
                 <p className="text-gray-500 text-sm">No users found.</p>
@@ -429,7 +496,7 @@ export default function ProjectPageLayout() {
             {selectedUsers.length > 0 && (
               <div className="mt-4">
                 <h4 className="text-sm text-gray-400 mb-2">Selected:</h4>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-700/80 scrollbar-track-gray-900/40 hover:scrollbar-thumb-gray-600/80 transition-all duration-300">
                   {selectedUsers.map((u) => (
                     <div
                       key={u._id}

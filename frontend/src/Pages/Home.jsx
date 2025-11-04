@@ -1,4 +1,4 @@
-import{ useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { useUser } from "../context/user.context";
@@ -12,6 +12,7 @@ const Home = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [project, setProject] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
 
   // React Hook Form setup
   const {
@@ -22,24 +23,28 @@ const Home = () => {
   } = useForm();
 
   // Fetch user profile
- useEffect(() => {
-  const init = async () => {
-    const isValid = await checkAuth(navigate, setUser);
-    if (!isValid){
-      console.log(user);
-      return;
-    }
+  useEffect(() => {
+    const init = async () => {
+      const isValidUser = await checkAuth(navigate, setUser);
+      if (!isValidUser) {
+        alert("User not found");
+        console.log(user);
+        navigate("/login");
+        return;
+      }
 
-    try {
-      const res = await axios.get(`/projects/all`);
-      setProject(res.data.projects);
-    } catch (error) {
-      console.error("Failed to load projects:", error);
-    }
-  };
+      try {
+        const res = await axios.get(`/projects/all`);
+        setProject(res.data.projects);
+      } catch (error) {
+        console.error("Failed to load projects:", error);
+      } finally {
+        setLoadingProjects(false); // done loading
+      }
+    };
 
-  init();
-}, []);
+    init();
+  }, []);
 
   // Create new project
   const createProject = async (data) => {
@@ -75,7 +80,11 @@ const Home = () => {
           </div>
 
           {/* Project Grid */}
-          {project.length === 0 ? (
+          {loadingProjects ? (
+            <div className="flex justify-center items-center mt-10">
+              Loading...
+            </div>
+          ) : project.length === 0 ? (
             <p className="text-gray-500 text-center mt-10">
               No projects yet — create one to get started!
             </p>
@@ -84,18 +93,15 @@ const Home = () => {
               {project.map((p) => (
                 <div
                   key={p._id}
-                  onClick={() =>
-                    navigate(`/project/${p._id}`)
-                  }
+                  onClick={() => navigate(`/project/${p._id}`)}
                   className="p-5 bg-gray-800/80 rounded-xl border border-gray-700 hover:bg-gray-700/70 transition-all cursor-pointer group"
                 >
                   <h3 className="text-lg font-semibold mb-2 group-hover:text-blue-400">
                     {p.name}
                   </h3>
-                  <div className=" text-sm flex space-x-1 text-gray-400">
-                    <p>Collaborators:
-                    {p.users?.length || 0}</p>
-                   <img className="w-3" src="/user.svg" alt="user" />
+                  <div className="text-sm flex space-x-1 text-gray-400">
+                    <p>Collaborators: {p.users?.length || 0}</p>
+                    <img className="w-3" src="/user.svg" alt="user" />
                   </div>
                 </div>
               ))}
