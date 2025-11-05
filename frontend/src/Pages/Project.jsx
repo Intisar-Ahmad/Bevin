@@ -30,6 +30,7 @@ export default function ProjectPageLayout() {
     user: null,
   });
   const messagesEndRef = useRef(null);
+  const [aiLoading, setaiLoading] = useState(false);
 
   const navigate = useNavigate();
 
@@ -56,8 +57,6 @@ export default function ProjectPageLayout() {
         const isCreator = fetchedProject.creator === validatedUser._id;
 
         if (!isMember && !isCreator) {
-          localStorage.removeItem("token");
-          setUser(null);
           alert("You don't have access to this project.");
           navigate("/");
           return;
@@ -70,7 +69,15 @@ export default function ProjectPageLayout() {
 
         //  Handle incoming messages (ignore own)
         const handleIncoming = (data) => {
+          // console.log(data)
           if (data.sender === validatedUser.email) return;
+          if (data.text?.includes("@ai")) {
+            // console.log("hi")
+            setaiLoading(true);
+          }
+          if (data.sender === "Bevin") {
+            setaiLoading(false);
+          }
           const incoming = {
             id: Date.now(),
             sender: data.sender || "Unknown",
@@ -121,6 +128,10 @@ export default function ProjectPageLayout() {
       console.error("Missing user or project context.");
       alert("Unable to send message. Please refresh the page");
       return;
+    }
+
+    if (messageText.toLowerCase().includes("@ai")) {
+      setaiLoading(true);
     }
 
     // 2️  Optimistic UI update — show message immediately
@@ -333,7 +344,7 @@ export default function ProjectPageLayout() {
       )}
 
       {/* CHAT SIDEBAR */}
-      <aside className="w-80 flex-shrink-0 bg-gray-950/80 backdrop-blur-xl border-r border-gray-800 flex flex-col p-4 relative z-20">
+      <aside className="w-80 flex-shrink-0 bg-gray-950/80 backdrop-blur-xl border-r border-gray-800 flex flex-col p-4 relative z-20 ">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <button
@@ -385,16 +396,38 @@ export default function ProjectPageLayout() {
               </small>
 
               <div
-                className={`p-3 rounded-lg max-w-xs break-words ${
+                className={`p-3 rounded-lg max-w-xs break-all ${
                   msg.type === "outgoing"
                     ? "bg-blue-700/80 ml-auto rounded-br-none"
                     : "bg-gray-800/80 rounded-bl-none"
                 }`}
               >
                 {msg.sender === "Bevin" ? (
-                  <Markdown>{msg.text}</Markdown>
+                  <Markdown
+                    className="break-words whitespace-pre-wrap overflow-hidden prose prose-invert max-w-full"
+                    options={{
+                      overrides: {
+                        code: {
+                          props: {
+                            className:
+                              "break-words whitespace-pre-wrap text-sm bg-gray-900 rounded-md px-2 py-1 inline-block",
+                          },
+                        },
+                        pre: {
+                          props: {
+                            className:
+                              "break-words whitespace-pre-wrap bg-gray-900 rounded-md p-3 overflow-x-auto",
+                          },
+                        },
+                      },
+                    }}
+                  >
+                    {msg.text}
+                  </Markdown>
                 ) : (
-                  <span>{msg.text}</span>
+                  <span className="break-words whitespace-pre-wrap">
+                    {msg.text}
+                  </span>
                 )}
               </div>
             </div>
@@ -406,6 +439,11 @@ export default function ProjectPageLayout() {
         {errors.message && (
           <p className="text-red-500 text-xs text-left mb-1 ml-1">
             {errors.message.message}
+          </p>
+        )}
+        {aiLoading && (
+          <p className="text-blue-500 text-xs text-left mb-1 ml-1">
+            Bevin is thinking...
           </p>
         )}
 

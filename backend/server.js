@@ -85,6 +85,12 @@ io.on("connection", (socket) => {
         io.to(socket.roomId).emit("project-message", aiMessage);
       }).catch((error) => {
         console.error("Error generating AI response:", error);
+        const aiMessage = {
+          text: "Error responding",
+          sender: "Bevin",
+          projectId:data.projectId
+        };
+        io.to(socket.roomId).emit("project-message", aiMessage);
       });
     }
   });
