@@ -8,6 +8,8 @@ import { checkAuth } from "../utils/checkToken.utils.js";
 import { useUser } from "../context/user.context.jsx";
 import { initializeSocket, receiveMsg, sendMsg } from "../config/socketIO.js";
 import Markdown from "markdown-to-jsx";
+import Editor from "@monaco-editor/react";
+import { getWebContainer } from "../config/webContainer.js";
 
 export default function ProjectPageLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -31,8 +33,18 @@ export default function ProjectPageLayout() {
   });
   const messagesEndRef = useRef(null);
   const [aiLoading, setaiLoading] = useState(false);
-
+  const [fileTree, setFileTree] = useState({});
+  const [openFiles, setOpenFiles] = useState([]); // array of {name, content}
+  const [activeFile, setActiveFile] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [webContainer, setWebContainer] = useState(null);
+  const [IsRunning, setIsRunning] = useState(false);
+  const [output, setOutput] = useState([]);
+  const [showOutput, setShowOutput] = useState(true);
+  const [iframeUrl, setIframeUrl] = useState(null);
   const navigate = useNavigate();
+  const [serverProc, setServerProc] = useState(null);
+  const [showIframe, setShowIframe] = useState(false)
 
   useEffect(() => {
     let socket;
@@ -66,17 +78,16 @@ export default function ProjectPageLayout() {
 
         //  Initialize socket once
         socket = initializeSocket(fetchedProject._id);
+        const container = await getWebContainer();
+        setWebContainer(container);
+        console.log("container connected");
 
         //  Handle incoming messages (ignore own)
         const handleIncoming = (data) => {
-          // console.log(data)
+          console.log(data);
           if (data.sender === validatedUser.email) return;
           if (data.text?.includes("@ai")) {
-            // console.log("hi")
             setaiLoading(true);
-          }
-          if (data.sender === "Bevin") {
-            setaiLoading(false);
           }
           const incoming = {
             id: Date.now(),
@@ -84,7 +95,26 @@ export default function ProjectPageLayout() {
             text: data.text,
             type: "incoming",
           };
-          setMessages((prev) => [...prev, incoming]);
+          if (data.sender === "Bevin") {
+            console.log(data);
+            try {
+              const parsed = JSON.parse(data.text);
+              console.log(parsed);
+
+              if (parsed?.fileTree) {
+                setFileTree(parsed?.fileTree);
+              }
+              incoming.text = parsed?.text;
+            } catch (error) {
+              console.log(error);
+              incoming.text = "Error sending response";
+            } finally {
+              setaiLoading(false);
+              setMessages((prev) => [...prev, incoming]);
+            }
+          } else {
+            setMessages((prev) => [...prev, incoming]);
+          }
         };
 
         receiveMsg("project-message", handleIncoming);
@@ -110,8 +140,60 @@ export default function ProjectPageLayout() {
     };
   }, [projectId, navigate, setUser]);
 
+  // kill process
+  const killProcess = () =>{
+    if (serverProc) {
+  serverProc.kill();
+  setServerProc(null);
+  alert("Server stopped.");
+}
+  }
+
+
+  // colors to code
+  const getLanguageFromFile = (filename = "") => {
+    const ext = filename.split(".").pop();
+
+    // console.log(ext);
+    switch (ext) {
+      case "json":
+        return "json";
+      case "js":
+      case "jsx":
+        return "javascript";
+      case "ts":
+      case "tsx":
+        return "typescript";
+      case "py":
+        return "python";
+      case "cpp":
+      case "cc":
+      case "cxx":
+      case "h":
+      case "hpp":
+        return "cpp";
+      case "html":
+        return "html";
+      case "css":
+        return "css";
+      case "java":
+        return "java";
+      default:
+        return "plaintext";
+    }
+  };
+
+  // handleFileClicks
+  const handleFileClick = (fileName, fileData) => {
+    const content = fileData?.file?.contents || "no content";
+    const alreadyOpen = openFiles.find((f) => f.name === fileName);
+    if (!alreadyOpen) {
+      setOpenFiles([...openFiles, { name: fileName, content }]);
+    }
+    setActiveFile(fileName);
+  };
+
   // Chat state
-  const [messages, setMessages] = useState([]);
   const {
     register,
     handleSubmit,
@@ -214,7 +296,6 @@ export default function ProjectPageLayout() {
   };
 
   // remove users
-
   const removeUser = async () => {
     if (!userToRemove) return;
     setRemoving(true);
@@ -237,10 +318,21 @@ export default function ProjectPageLayout() {
     }
   };
 
+  // handle ai msg UI
+  function handleAIUI(message) {
+    return (
+      <Markdown className="break-words whitespace-pre-wrap overflow-hidden prose prose-invert max-w-full">
+        {message}
+      </Markdown>
+    );
+  }
+
+  // scroll msgs into view
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // show loader
   if (loading) return <Loader />;
 
   return (
@@ -396,34 +488,14 @@ export default function ProjectPageLayout() {
               </small>
 
               <div
-                className={`p-3 rounded-lg max-w-xs break-all ${
+                className={`p-3 rounded-lg max-w-xs break-words ${
                   msg.type === "outgoing"
                     ? "bg-blue-700/80 ml-auto rounded-br-none"
                     : "bg-gray-800/80 rounded-bl-none"
                 }`}
               >
                 {msg.sender === "Bevin" ? (
-                  <Markdown
-                    className="break-words whitespace-pre-wrap overflow-hidden prose prose-invert max-w-full"
-                    options={{
-                      overrides: {
-                        code: {
-                          props: {
-                            className:
-                              "break-words whitespace-pre-wrap text-sm bg-gray-900 rounded-md px-2 py-1 inline-block",
-                          },
-                        },
-                        pre: {
-                          props: {
-                            className:
-                              "break-words whitespace-pre-wrap bg-gray-900 rounded-md p-3 overflow-x-auto",
-                          },
-                        },
-                      },
-                    }}
-                  >
-                    {msg.text}
-                  </Markdown>
+                  handleAIUI(msg.text)
                 ) : (
                   <span className="break-words whitespace-pre-wrap">
                     {msg.text}
@@ -474,11 +546,307 @@ export default function ProjectPageLayout() {
         </p>
       </aside>
 
-      {/* MAIN AREA */}
-      <section className="flex-1 bg-gray-900/40 flex items-center justify-center">
-        <span className="text-gray-500">
-          Code generation area (blank for now)
-        </span>
+      {/* ---------- MAIN AREA ---------- */}
+      <section className="flex-1 flex bg-gray-900/40 overflow-hidden">
+        <div className="absolute top-0 right-2 z-50">
+          <button
+            disabled={IsRunning}
+            // you'll handle this
+            onClick={async () => {
+              setIsRunning(true);
+              setOutput([]);
+              if (!webContainer) {
+                alert("No WebContainer instance found.");
+                setIsRunning(false);
+                return;
+              }
+
+              if (!activeFile) {
+                alert("No active file selected.");
+                setIsRunning(false);
+                return;
+              }
+
+              // Sanitize filenames (flat)
+              const sanitizeFileTree = (tree) => {
+                const validTree = {};
+                for (const [filename, data] of Object.entries(tree)) {
+                  const safeName = filename
+                    .replace(/[^a-zA-Z0-9._\-]/g, "_")
+                    .replace(/^_+|_+$/g, "");
+                  if (!safeName) continue;
+                  validTree[safeName] = data;
+                }
+                return validTree;
+              };
+
+              const safeTree = sanitizeFileTree(fileTree);
+
+              try {
+                // Mount the files into WebContainer FS
+                await webContainer.mount(safeTree);
+
+                // Detect extension
+                const ext = activeFile.split(".").pop().toLowerCase();
+
+                // Run logic for supported files
+                if (ext === "js" || ext === "mjs" || ext === "cjs") {
+                  console.log("Running JS/TS file:", activeFile);
+
+                  // If user has express setup, run `npm install` and start server
+                  const hasPackageJson =
+                    Object.keys(safeTree).includes("package.json");
+                  const isServerFile = /server\.js|app\.js/i.test(activeFile);
+
+                  if (hasPackageJson || isServerFile) {
+                    alert("Starting Express server inside WebContainer...");
+
+                    // install dependencies (safe)
+                    const installProc = await webContainer.spawn("npm", [
+                      "install",
+                    ]);
+
+                    installProc.output.pipeTo(
+                      new WritableStream({
+                        write(chunk) {
+                          const text = chunk.toString();
+                          setOutput((prev) => [...prev, text]);
+                        },
+                      })
+                    );
+                    await installProc.exit;
+
+                    // start server
+                    const startProc = await webContainer.spawn("npm", [
+                      "start",
+                    ]);
+                    setServerProc(startProc);
+                    startProc.output.pipeTo(
+                      new WritableStream({
+                        write(chunk) {
+                          const text = chunk.toString();
+                          setOutput((prev) => [...prev, text]);
+                        },
+                      })
+                    );
+                    webContainer.on("server-ready", (port, url) => {
+                      console.log(port, url);
+                      setIframeUrl(url);
+                    });
+
+                    alert("Express server running inside WebContainer.");
+                  } else {
+                    // just execute standalone JS file
+                    const runProc = await webContainer.spawn("node", [
+                      activeFile,
+                    ]);
+                    runProc.output.pipeTo(
+                      new WritableStream({
+                        write(chunk) {
+                          const text = chunk.toString();
+                          setOutput((prev) => [...prev, text]);
+                        },
+                      })
+                    );
+
+                    const exitCode = await runProc.exit;
+                    console.log("Process exited with code:", exitCode);
+                  }
+                } else {
+                  // Unsupported file types
+                  alert(`Only .js files are supported yet.`);
+                }
+              } catch (err) {
+                console.error("Error running file:", err);
+                alert(
+                  "An error occurred while running your file. Check console."
+                );
+              } finally {
+                setIsRunning(false);
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-1 rounded-xl font-semibold 
+               bg-gradient-to-r from-purple-600 to-purple-700 
+               hover:from-purple-500 hover:to-purple-600
+               text-white  
+               transition-all duration-300
+               hover:scale-105 active:scale-95"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
+              <path d="M5 3l14 9-14 9V3z" />
+            </svg>
+            <span>{IsRunning ? "Running" : "Run"}</span>
+          </button>
+        </div>
+        {/* FILES SIDEBAR */}
+        <aside className="w-64 border-r border-gray-800 bg-gray-950/60 backdrop-blur-xl p-4 flex flex-col">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+              Files
+            </span>
+          </h3>
+
+          <div className="flex-1 space-y-3 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 pb-4 overflow-x-hidden w-[100%]">
+            {/* File Tiles */}
+            {Object.keys(fileTree).map((file, i) => (
+              <div
+                key={i + Math.floor(Math.random() * 1000)}
+                className="flex items-center gap-3 bg-gray-800/70 hover:bg-gray-700/80 p-3 rounded-lg transition cursor-pointer group w-full overflow-hidden"
+                onClick={() => handleFileClick(file, fileTree[file])}
+              >
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center text-sm font-semibold text-white">
+                  {file.split(".")[1]?.[0]?.toUpperCase() || "F"}
+                </div>
+                <div className="flex-1 w-[70%] overflow-hidden">
+                  <p className="text-sm font-medium group-hover:text-blue-400 transition">
+                    {file}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* MAIN WORKSPACE */}
+        <div className="flex-1 flex flex-col bg-gray-900/60 border-l border-gray-800 rounded-tl-xl">
+          {/* FILE TABS */}
+          <div className="flex items-center gap-1 border-b border-gray-800 bg-gray-950/60 px-2 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
+            {openFiles.length > 0 ? (
+              openFiles.map((file) => (
+                <div
+                  key={file.name}
+                  className={`flex items-center gap-1 px-3 py-2 text-sm cursor-pointer rounded-t-md transition
+            ${
+              activeFile === file.name
+                ? "bg-gray-800/70 text-blue-400 border-b-2 border-blue-500"
+                : "text-gray-400 hover:text-gray-200"
+            }`}
+                  onClick={() => setActiveFile(file.name)}
+                >
+                  <span>{file.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const remaining = openFiles.filter(
+                        (f) => f.name !== file.name
+                      );
+                      setOpenFiles(remaining);
+                      if (activeFile === file.name) {
+                        setActiveFile(
+                          remaining.length ? remaining[0].name : null
+                        );
+                      }
+                    }}
+                    className="hover:text-red-400 ml-1"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-sm italic py-2 px-3">
+                No files open.
+              </p>
+            )}
+          </div>
+
+          {/* FILE PREVIEW AREA */}
+          <div className="flex-1 bg-gray-900/80 p-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 text-sm text-gray-300 font-mono rounded-b-xl">
+            {activeFile ? (
+              <Editor
+                height="100%"
+                theme="vs-dark"
+                language={getLanguageFromFile(activeFile)}
+                value={
+                  openFiles.find((f) => f.name === activeFile)?.content || ""
+                }
+                onChange={(newValue) => {
+                  setOpenFiles((prev) =>
+                    prev.map((f) =>
+                      f.name === activeFile ? { ...f, content: newValue } : f
+                    )
+                  );
+                }}
+                options={{
+                  fontSize: 14,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-600 italic">
+                Select a file from the sidebar to open it.
+              </div>
+            )}
+          </div>
+        </div>
+        {/* ---------- OUTPUT PANEL ---------- */}
+        {showOutput && (
+          <div className="absolute bottom-0 left-[320px] right-0 h-48 bg-gray-950/90 border-t border-gray-800 text-gray-200 font-mono text-sm overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 p-3 z-40">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-gray-400">Console Output</span>
+              <button
+                onClick={() => setShowOutput(false)}
+                className="text-xs text-gray-500 hover:text-gray-300"
+              >
+                Hide
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap break-words">
+              {output.length ? output.join("") : "No output yet."}
+            </pre>
+          </div>
+        )}
+        {/* ---------- IFAME PREVIEW ---------- */}
+           {!showIframe && (
+          <button
+            onClick={() => setShowIframe(true)}
+            className="absolute bottom-2 right-[130px] bg-gray-800/70 px-3 py-1 text-xs rounded-md text-gray-300 hover:bg-gray-700 z-40"
+          >
+            Show Iframe
+          </button>
+        )}
+        {showIframe && (
+          <div className="absolute top-0 left-[320px] right-0 bottom-0 bg-gray-950/95 border-t border-gray-800 flex flex-col z-40">
+            <div className="flex space-x-2 items-center bg-gray-900 border-b border-gray-800 p-2">
+              <span className="text-xs text-gray-400">
+                Express App Preview 
+              </span>
+              <button
+                onClick={() => setShowIframe(null)}
+                className="text-xs text-gray-400 hover:text-gray-200 transition"
+              >
+                Hide Preview
+              </button>
+              <button
+                onClick={killProcess}
+                className="text-xs text-gray-400 hover:text-gray-200 transition"
+              >
+                Kill process
+              </button>
+            </div>
+            <iframe
+              src={iframeUrl}
+              title="App Preview"
+              className="w-full h-full bg-white rounded-none"
+            />
+          </div>
+        )}
+
+        {!showOutput && (
+          <button
+            onClick={() => setShowOutput(true)}
+            className="absolute bottom-2 right-4 bg-gray-800/70 px-3 py-1 text-xs rounded-md text-gray-300 hover:bg-gray-700 z-40"
+          >
+            Show Console
+          </button>
+        )}
       </section>
 
       {/* ---------- ADD USER MODAL ---------- */}

@@ -1,31 +1,30 @@
-import socket from 'socket.io-client';
+import socket from "socket.io-client";
 
 let socketInstance = null;
 
 export const initializeSocket = (projectId) => {
-    socketInstance = socket(import.meta.env.VITE_BACKEND_URL,{
-        auth: {
-            token:localStorage.getItem("token")
-        },
-        query:{
-            projectId
-        }
-    })
+  socketInstance = socket(import.meta.env.VITE_BACKEND_URL, {
+    auth: {
+      token: localStorage.getItem("token"),
+    },
+    query: {
+      projectId,
+    },
+  });
 
-    return socketInstance;
-}
+  return socketInstance;
+};
 
-export const receiveMsg = (eventName,callback) => {
-    if(!socketInstance) return;
+export const receiveMsg = (eventName, callback) => {
+  if (!socketInstance) return;
 
-    socketInstance.on(eventName,callback);
-}
+  socketInstance.on(eventName,callback);
+};
 
-export const sendMsg = (eventName,data) => {
-    if(!socketInstance) return;
+export const sendMsg = (eventName, data) => {
+  if (!socketInstance) return;
 
-    socketInstance.emit(eventName,data);
-}
+  socketInstance.emit(eventName, data);
+};
 
 export const getSocket = () => socket;
-

@@ -32,7 +32,6 @@ export const checkAuth = async (navigate, setUser) => {
     return res.data.user;
   } catch (err) {
     console.error("Auth check failed:", err);
-    localStorage.removeItem("token");
     setUser(null);
     navigate("/login");
     return null;

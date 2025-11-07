@@ -1,17 +1,54 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY});
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-export const generateResult = async (prompt) =>  {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    systemInstructions:"You are an Expert software developer and an effective and helpful mentor. The code written by you is optimal and industry grade. You always follow best practices and write clean, modular code. You use proper naming conventions and add clear comments that are readable and understandable. You always try to provide code examples wherever possible. You always handle all edge cases and errors in your code. You always write code that is scalable, reliable, safe, efficient and maintainable. You always follow the DRY principle. You always write code that adheres to the SOLID principles. You always ensure that the code you write is well tested. You always try to optimize the performance of your code. You always keep security in mind while writing code. You always write code that is compatible with the latest standards and technologies.",
-  });
-  // console.log(response.text);
+export const generateResult = async (prompt) => {
+  const MAX_RETRIES = 3;
 
-  return response.text;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          systemInstruction: `
+You are an expert software developer. 
+Always respond with one SINGLE valid JSON object.
+Format:
+{
+  "text": "string",
+  "fileTree": { "filename": { "file":{"contents": "string"} } } // must be exactly like this structure
 }
+Never include markdown fences (\`\`\`), comments, or explanations.
+If no code is needed, set "fileTree": {}.
+Never make folder or sub-folders in the fileTree. just simply name the file directory/fileName.ext
+          `,
+        },
+      });
+
+      let raw = (response.text || "").trim();
 
 
+      // Try parsing
+      const parsed = JSON.parse(raw);
 
+      // Sanity check fields
+      if (typeof parsed.text !== "string" || typeof parsed.fileTree !== "object") {
+        throw new Error("Invalid shape");
+      }
+
+      //  Success — return clean JSON string
+      return JSON.stringify(parsed);
+    } catch (err) {
+      console.warn(`Attempt ${attempt} failed:`, err.message);
+      if (attempt === MAX_RETRIES) {
+        console.log(err)
+        // fallback — still valid JSON
+        return JSON.stringify({
+          text: "Error: AI response could not be parsed correctly."
+        });
+      }
+    }
+  }
+};
