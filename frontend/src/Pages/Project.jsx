@@ -44,7 +44,7 @@ export default function ProjectPageLayout() {
   const [iframeUrl, setIframeUrl] = useState(null);
   const navigate = useNavigate();
   const [serverProc, setServerProc] = useState(null);
-  const [showIframe, setShowIframe] = useState(false)
+  const [showIframe, setShowIframe] = useState(false);
 
   useEffect(() => {
     let socket;
@@ -141,14 +141,13 @@ export default function ProjectPageLayout() {
   }, [projectId, navigate, setUser]);
 
   // kill process
-  const killProcess = () =>{
+  const killProcess = () => {
     if (serverProc) {
-  serverProc.kill();
-  setServerProc(null);
-  alert("Server stopped.");
-}
-  }
-
+      serverProc.kill();
+      setServerProc(null);
+      alert("Server stopped.");
+    }
+  };
 
   // colors to code
   const getLanguageFromFile = (filename = "") => {
@@ -771,6 +770,16 @@ export default function ProjectPageLayout() {
                       f.name === activeFile ? { ...f, content: newValue } : f
                     )
                   );
+
+                  // keep fileTree in sync
+                  setFileTree((prev) => ({
+                    ...prev,
+                    [activeFile]: {
+                      file: {
+                        contents: newValue,
+                      },
+                    },
+                  }));
                 }}
                 options={{
                   fontSize: 14,
@@ -804,7 +813,7 @@ export default function ProjectPageLayout() {
           </div>
         )}
         {/* ---------- IFAME PREVIEW ---------- */}
-           {!showIframe && (
+        {!showIframe && (
           <button
             onClick={() => setShowIframe(true)}
             className="absolute bottom-2 right-[130px] bg-gray-800/70 px-3 py-1 text-xs rounded-md text-gray-300 hover:bg-gray-700 z-40"
@@ -815,9 +824,7 @@ export default function ProjectPageLayout() {
         {showIframe && (
           <div className="absolute top-0 left-[320px] right-0 bottom-0 bg-gray-950/95 border-t border-gray-800 flex flex-col z-40">
             <div className="flex space-x-2 items-center bg-gray-900 border-b border-gray-800 p-2">
-              <span className="text-xs text-gray-400">
-                Express App Preview 
-              </span>
+              <span className="text-xs text-gray-400">Express App Preview</span>
               <button
                 onClick={() => setShowIframe(null)}
                 className="text-xs text-gray-400 hover:text-gray-200 transition"
