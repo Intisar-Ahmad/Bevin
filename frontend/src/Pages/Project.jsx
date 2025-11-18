@@ -76,6 +76,17 @@ export default function ProjectPageLayout() {
 
         setProject(fetchedProject);
 
+        const history = await axios.get(`/projects/get-messages/${projectId}`);
+        setMessages(
+          history.data.map((m) => ({
+            id: m._id,
+            sender: m.type === "ai" ? "Bevin" : m.senderId.email,
+            text: m.content,
+            type:
+              m.senderId?._id === validatedUser._id ? "outgoing" : "incoming",
+          }))
+        );
+
         //  Initialize socket once
         socket = initializeSocket(fetchedProject._id);
         const container = await getWebContainer();
@@ -86,7 +97,7 @@ export default function ProjectPageLayout() {
         const handleIncoming = (data) => {
           console.log(data);
           if (data.sender === validatedUser.email) return;
-          if (data.text?.includes("@ai")) {
+          if (data.text?.text?.includes("@ai")) {
             setaiLoading(true);
           }
           const incoming = {
@@ -98,13 +109,13 @@ export default function ProjectPageLayout() {
           if (data.sender === "Bevin") {
             console.log(data);
             try {
-              const parsed = JSON.parse(data.text);
-              console.log(parsed);
+              // const parsed = JSON.parse(data.text);
+              // console.log(parsed);
 
-              if (parsed?.fileTree) {
-                setFileTree(parsed?.fileTree);
+              if (data.text?.fileTree) {
+                setFileTree(data.text?.fileTree);
               }
-              incoming.text = parsed?.text;
+              incoming.text = data.text?.text;
             } catch (error) {
               console.log(error);
               incoming.text = "Error sending response";
@@ -608,7 +619,7 @@ export default function ProjectPageLayout() {
                     installProc.output.pipeTo(
                       new WritableStream({
                         write(chunk) {
-                          const text = chunk.toString();
+                          const text = chunk.toString().replace(/\x1b\[[0-9;]*m/g, "");
                           setOutput((prev) => [...prev, text]);
                         },
                       })
@@ -623,7 +634,7 @@ export default function ProjectPageLayout() {
                     startProc.output.pipeTo(
                       new WritableStream({
                         write(chunk) {
-                          const text = chunk.toString();
+                          const text = chunk.toString().replace(/\x1b\[[0-9;]*m/g, "");
                           setOutput((prev) => [...prev, text]);
                         },
                       })
@@ -642,7 +653,7 @@ export default function ProjectPageLayout() {
                     runProc.output.pipeTo(
                       new WritableStream({
                         write(chunk) {
-                          const text = chunk.toString();
+                          const text = chunk.toString().replace(/\x1b\[[0-9;]*m/g, "");
                           setOutput((prev) => [...prev, text]);
                         },
                       })

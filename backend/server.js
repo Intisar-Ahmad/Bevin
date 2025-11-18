@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import Project from "./models/project.model.js";
 import { generateResult } from "./services/gemini.service.js";
+import Message from "./models/message.model.js";
 
 const port = process.env.PORT || 3000;
 
@@ -61,47 +62,48 @@ io.use(async (socket, next) => {
 
 io.on("connection", (socket) => {
   socket.roomId = socket.project._id.toString();
-
-  console.log("a user connected");
-
   socket.join(socket.roomId);
 
-  console.log(socket.roomId);
+  socket.on("project-message", async (data) => {
+    try {
+     
+     await Message.create({
+        senderId: socket.user._id,
+        projectId: socket.project._id,
+        content: data.text,
+        type: "user",
+      });
 
-  socket.on("project-message", (data) => {
-    console.log(data)
-    const message = data.text;
-    console.log("Message:", message);
-    socket.broadcast.to(socket.roomId).emit("project-message", data);
 
-    if (message.includes("@ai") && data.sender !== "Bevin") {
-      const prompt = message.replace("@ai", "").trim();
-      generateResult(prompt).then((result) => {
-        const aiMessage = {
+      socket.broadcast.to(socket.roomId).emit("project-message", data);
+
+      if (data.text.includes("@ai") && data.sender !== "Bevin") {
+        const prompt = data.text.replace("@ai", "").trim();
+        const result = JSON.parse(await generateResult(prompt));
+
+
+         await Message.create({
+          senderId: null, // or a "system" user
+          projectId: socket.project._id,
+          content: result?.text || "Error: AI response could not be parsed correctly.",
+          type: "ai",
+        });
+
+        io.to(socket.roomId).emit("project-message", {
           text: result,
           sender: "Bevin",
-          projectId:data.projectId
-        };
-        io.to(socket.roomId).emit("project-message", aiMessage);
-      }).catch((error) => {
-        console.error("Error generating AI response:", error);
-        const aiMessage = {
-          text: "Error responding",
+        });
+      }
+    } catch (e) {
+      console.error("Message save error:", e);
+       io.to(socket.roomId).emit("project-message", {
+          text: "Error: AI response could not be parsed correctly.",
           sender: "Bevin",
-          projectId:data.projectId
-        };
-        io.to(socket.roomId).emit("project-message", aiMessage);
-      });
+        });
     }
   });
-
-  socket.on("event", (data) => {
-    /* … */
-  });
-  socket.on("disconnect", () => {
-    /* … */
-  });
 });
+
 
 server.listen(port, () => {
   console.log(`Server running on port ${port}`);

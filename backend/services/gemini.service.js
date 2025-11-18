@@ -28,7 +28,7 @@ Never make folder or sub-folders in the fileTree. just simply name the file dire
       });
 
       let raw = (response.text || "").trim();
-
+      // console.log(raw);
 
       // Try parsing
       const parsed = JSON.parse(raw);
@@ -39,6 +39,7 @@ Never make folder or sub-folders in the fileTree. just simply name the file dire
       }
 
       //  Success — return clean JSON string
+      console.log(parsed);
       return JSON.stringify(parsed);
     } catch (err) {
       console.warn(`Attempt ${attempt} failed:`, err.message);
